@@ -1,11 +1,11 @@
 # ============================================
 # File: src/churn_model/evaluate.py
 # ============================================
-import argparse  # re
+import argparse
 import sys
 import time
 from pathlib import Path
-from typing import Optional  # Any, Dict, List
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import mlflow
@@ -36,28 +36,15 @@ from .utils import load_json, load_pipeline_joblib, setup_logging
 setup_logging()
 
 
+# --- Plotting Functions ---
 def plot_roc_curve(y_true, y_proba, model_name, output_path: Path):
     """Generates and saves ROC curve plot."""
     try:
         fpr, tpr, _ = roc_curve(y_true, y_proba)
         auc_score = roc_auc_score(y_true, y_proba)
         plt.figure(figsize=(8, 6))
-        plt.plot(
-            fpr,
-            tpr,
-            label=f"ROC Curve (AUC = {auc_score:.3f})",
-            color="darkorange",
-            lw=2,
-        )
-        plt.plot(
-            [0, 1],
-            [0, 1],
-            "k--",
-            label="Random Guess",
-            color="navy",
-            lw=2,
-            linestyle="--",
-        )
+        plt.plot(fpr, tpr, label=f"ROC Curve (AUC = {auc_score:.3f})", color="darkorange", lw=2)
+        plt.plot([0, 1], [0, 1], "k--", label="Random Guess", color="navy", lw=2, linestyle="--")
         plt.xlabel("False Positive Rate")
         plt.ylabel("True Positive Rate")
         plt.title(f"{model_name} ROC Curve (Test Set)")
@@ -96,13 +83,7 @@ def plot_precision_recall_curve(y_true, y_proba, model_name, output_path: Path):
         precision, recall, _ = precision_recall_curve(y_true, y_proba)
         avg_precision = average_precision_score(y_true, y_proba)
         plt.figure(figsize=(8, 6))
-        plt.plot(
-            recall,
-            precision,
-            label=f"{model_name} (AP = {avg_precision:.3f})",
-            color="teal",
-            lw=2,
-        )
+        plt.plot(recall, precision, label=f"{model_name} (AP = {avg_precision:.3f})", color="teal", lw=2)
         plt.xlabel("Recall")
         plt.ylabel("Precision")
         plt.title(f"{model_name} Precision-Recall Curve (Test Set)")
@@ -116,8 +97,6 @@ def plot_precision_recall_curve(y_true, y_proba, model_name, output_path: Path):
         logger.error(f"Failed to generate Precision-Recall curve: {e}", exc_info=True)
         return False
 
-
-# --- SHAP Analysis Function ---
 def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
     """Performs SHAP analysis and saves plots."""
     logger.info("--- Starting SHAP Analysis ---")
@@ -127,6 +106,7 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
     output_dir = Path(eval_cfg.shap_plots_output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     model_name = "UnknownModel"
+    feature_names = []
     try:
         preprocessor_step = pipeline.named_steps["data_processing"]
         model_step = pipeline.named_steps["classifier"]
@@ -143,42 +123,57 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
     try:
         X_train_processed = preprocessor_step.transform(X_train)
         X_test_processed = preprocessor_step.transform(X_test)
-        if isinstance(X_train_processed, pd.DataFrame):
-            feature_names = X_train_processed.columns.tolist()
-            logger.info(f"Data preprocessed for SHAP. Features: {len(feature_names)}")
-        else:
-            logger.warning(
-                "Preprocessor output is not DataFrame. Attempting to get feature names."
-            )
+        if not isinstance(X_train_processed, pd.DataFrame):
+            logger.warning("Preprocessor output is not DataFrame. Attempting conversion.")
             try:
                 feature_names = preprocessor_step.get_feature_names_out()
             except AttributeError:
-                feature_names = [
-                    f"feature_{i}" for i in range(X_train_processed.shape[1])
-                ]
+                feature_names = [f"feature_{i}" for i in range(X_train_processed.shape[1])]
                 logger.warning("Using generic feature names.")
+            X_train_processed = pd.DataFrame(X_train_processed, columns=feature_names, index=X_train.index)
+            X_test_processed = pd.DataFrame(X_test_processed, columns=feature_names, index=X_test.index)
+        else:
+            feature_names = X_train_processed.columns.tolist()
+        logger.info(f"Data preprocessed for SHAP. Features: {len(feature_names)}")
+        logger.debug(f"Sample processed feature names: {feature_names[:10]}...")
+        logger.debug(f"X_train_processed shape: {X_train_processed.shape}")
+        logger.debug(f"X_test_processed shape: {X_test_processed.shape}")
     except Exception as e:
         logger.error(f"Failed to preprocess data for SHAP: {e}", exc_info=True)
         return False
     if model_type == "XGBClassifier":
-        logger.debug("Sanitizing feature names for XGBoost SHAP analysis.")
-        X_train_processed = _sanitize_column_names(X_train_processed.copy())
-        X_test_processed = _sanitize_column_names(X_test_processed.copy())
-        feature_names = X_test_processed.columns.tolist()
+        logger.info("Sanitizing feature names for XGBoost SHAP analysis.")
+        try:
+            X_train_processed = _sanitize_column_names(X_train_processed.copy())
+            X_test_processed = _sanitize_column_names(X_test_processed.copy())
+            feature_names = X_test_processed.columns.tolist()
+            logger.debug(f"Sanitized feature names count: {len(feature_names)}")
+            logger.debug(f"Sample sanitized feature names: {feature_names[:10]}...")
+        except Exception as e:
+            logger.error(f"Failed to sanitize names for XGBoost SHAP: {e}", exc_info=True)
+            return False
+
     explainer = None
     shap_values = None
     expected_value = None
-    X_test_subset_for_plot = X_test_processed
+    X_data_for_shap_values = X_test_processed
+    X_data_for_plots = X_test_processed  # Initially assume using full test data for plots
+
     try:
         if model_type in ["RandomForestClassifier", "LGBMClassifier", "XGBClassifier"]:
             logger.info("Using shap.TreeExplainer.")
-            explainer = shap.TreeExplainer(model_step, data=X_train_processed)
+            background_data_tree = shap.sample(X_train_processed, 100)
+            logger.debug(f"Using background data shape for TreeExplainer: {background_data_tree.shape}")
+            explainer = shap.TreeExplainer(
+                model_step,
+                data=background_data_tree,
+                feature_perturbation="interventional",
+            )
             logger.info("Calculating SHAP values (TreeExplainer)...")
             calc_start = time.time()
-            shap_values = explainer.shap_values(X_test_processed)
-            logger.info(
-                f"SHAP values calculated (TreeExplainer) in {time.time() - calc_start:.2f}s"
-            )
+            logger.warning("Applying workaround: Setting check_additivity=False for shap_values calculation.")
+            shap_values = explainer.shap_values(X_data_for_shap_values, check_additivity=False)
+            logger.info(f"SHAP values calculated (TreeExplainer) in {time.time() - calc_start:.2f}s")
             expected_value = explainer.expected_value
         elif model_type in ["SVC", "LogisticRegression"]:
             logger.info("Using shap.KernelExplainer (can be slow).")
@@ -187,165 +182,168 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
                 data_df = pd.DataFrame(data_as_np, columns=feature_names)
                 return model_step.predict_proba(data_df)
 
-            num_bg_samples = min(
-                eval_cfg.shap_kernel_background_samples, X_train_processed.shape[0]
-            )
-            logger.info(
-                f"Creating KernelExplainer background dataset using kmeans ({num_bg_samples} samples)..."
-            )
-            background_data = shap.kmeans(
-                X_train_processed, num_bg_samples, random_state=data_cfg.random_state
-            )
-            explainer = shap.KernelExplainer(predict_proba_wrapper, background_data)
+            num_bg_samples = min(eval_cfg.shap_kernel_background_samples, X_train_processed.shape[0])
+            logger.info(f"Creating KernelExplainer background dataset using kmeans ({num_bg_samples} samples)...")
+            background_data_kernel = shap.kmeans(X_train_processed, num_bg_samples, random_state=data_cfg.random_state)
+            logger.debug(f"Background data shape for KernelExplainer: {background_data_kernel.shape}")
+            explainer = shap.KernelExplainer(predict_proba_wrapper, background_data_kernel)
             num_test_samples = min(100, X_test_processed.shape[0])
-            X_test_subset_for_plot = X_test_processed.iloc[:num_test_samples, :]
-            logger.info(
-                f"Calculating SHAP values for {num_test_samples} test samples (KernelExplainer)..."
-            )
+            # IMPORTANT: Update X_data_for_shap_values AND X_data_for_plots if using subset
+            X_data_for_shap_values = X_test_processed.iloc[:num_test_samples, :]
+            X_data_for_plots = X_data_for_shap_values  # Use the same subset for plotting features
+            logger.info(f"Calculating SHAP values for {num_test_samples} test samples (KernelExplainer)...")
             calc_start = time.time()
-            shap_values = explainer.shap_values(X_test_subset_for_plot, nsamples="auto")
-            logger.info(
-                f"SHAP values calculated (KernelExplainer) in {time.time() - calc_start:.2f}s"
-            )
+            shap_values = explainer.shap_values(X_data_for_shap_values, nsamples="auto")
+            logger.info(f"SHAP values calculated (KernelExplainer) in {time.time() - calc_start:.2f}s")
             expected_value = explainer.expected_value
         else:
-            logger.warning(
-                f"SHAP analysis not implemented for model type: {model_type}."
-            )
+            logger.warning(f"SHAP analysis not implemented for model type: {model_type}.")
             return True
         logger.info("SHAP values calculation complete.")
+        if isinstance(shap_values, list):
+            logger.debug(f"shap_values is a list of length: {len(shap_values)}")
+        elif isinstance(shap_values, np.ndarray):
+            logger.debug(f"shap_values shape: {shap_values.shape}")
     except Exception as e:
         logger.error(f"Failed during SHAP calculation: {e}", exc_info=True)
         return False
+
+    # --- Generate SHAP Plots ---
     plot_success = True
     if explainer and shap_values is not None:
         logger.info("Generating SHAP plots...")
         try:
+            # 1. Extract positive class values and ensure NumPy array
+            shap_values_pos = None
+            expected_value_pos = None
             if isinstance(shap_values, list) and len(shap_values) == 2:
-                shap_values_pos = shap_values[1]
-                expected_value_pos = (
-                    expected_value[1]
-                    if isinstance(expected_value, (list, np.ndarray))
-                    and len(expected_value) == 2
-                    else expected_value
-                )
+                shap_values_pos = np.array(shap_values[1])
+                if isinstance(expected_value, (list, np.ndarray)) and len(expected_value) == 2:
+                    expected_value_pos = expected_value[1]
+                elif isinstance(expected_value, (float, int, np.number)):
+                    expected_value_pos = expected_value
+                else:
+                    logger.warning(f"Unexpected format for expected_value: {type(expected_value)}. Using 0.0")
+                    expected_value_pos = 0.0
+            elif isinstance(shap_values, np.ndarray):
+                shap_values_pos = np.array(shap_values)
+                if isinstance(expected_value, (float, int, np.number)):
+                    expected_value_pos = expected_value
+                else:
+                    logger.warning(f"Unexpected format for expected_value: {type(expected_value)}. Using 0.0")
+                    expected_value_pos = 0.0
             else:
-                shap_values_pos = shap_values
-                expected_value_pos = expected_value
-            data_for_plots = X_test_subset_for_plot
-            plot_tasks = {
-                "summary_bar": lambda: shap.summary_plot(
-                    shap_values_pos,
-                    data_for_plots,
-                    plot_type="bar",
-                    show=False,
-                    feature_names=feature_names,
-                ),
-                "summary_dot": lambda: shap.summary_plot(
-                    shap_values_pos,
-                    data_for_plots,
-                    show=False,
-                    feature_names=feature_names,
-                ),
-            }
-            for plot_name, plot_func in plot_tasks.items():
-                try:
-                    plt.figure()
-                    plot_func()
-                    plt.title(
-                        f"SHAP {plot_name.replace('_', ' ').title()} ({model_name})"
-                    )
-                    plt.tight_layout()
-                    plt.savefig(
-                        output_dir / f"{model_name}_shap_{plot_name}.png",
-                        bbox_inches="tight",
-                    )
-                    plt.close()
-                    logger.info(f"Saved SHAP {plot_name} plot.")
-                except Exception as e_plt:
-                    logger.error(
-                        f"Failed to generate SHAP {plot_name} plot: {e_plt}",
-                        exc_info=True,
-                    )
-                    plot_success = False
+                logger.error(f"Unexpected format for shap_values: {type(shap_values)}.")
+                return False
+            if not isinstance(shap_values_pos, np.ndarray):
+                logger.error(f"shap_values_pos is not numpy array.")
+                return False
+            logger.debug(f"Positive class SHAP values shape: {shap_values_pos.shape}")
+
+            # --- FIX: Convert X_data_for_plots to NumPy array for plotting functions ---
+            if isinstance(X_data_for_plots, pd.DataFrame):
+                # Use .to_numpy() which is generally preferred over .values
+                X_plot_np = X_data_for_plots.to_numpy()
+                logger.debug(f"Converted X_data_for_plots to NumPy array for plotting. Shape: {X_plot_np.shape}")
+            elif isinstance(X_data_for_plots, np.ndarray):
+                X_plot_np = X_data_for_plots  # Already numpy
+                logger.debug("X_data_for_plots is already NumPy array.")
+            else:
+                logger.error(f"Unsupported type for X_data_for_plots: {type(X_data_for_plots)}")
+                return False
+            # --- END FIX ---
+
+            if shap_values_pos.shape[0] != X_plot_np.shape[0]:
+                logger.error(f"SHAP values row count ({shap_values_pos.shape[0]}) != plot data row count ({X_plot_np.shape[0]})!")
+                return False
+
+            # --- Plotting (Pass NumPy array X_plot_np instead of DataFrame X_data_for_plots) ---
+            plot_name = "summary_bar"
+            try:
+                plt.figure()
+                shap.summary_plot(shap_values_pos, X_plot_np, plot_type="bar", show=False, feature_names=feature_names)
+                plt.title(f"SHAP {plot_name.replace('_', ' ').title()} ({model_name})")
+                plt.tight_layout()
+                plt.savefig(output_dir / f"{model_name}_shap_{plot_name}.png", bbox_inches="tight")
+                plt.close()
+                logger.info(f"Saved SHAP {plot_name} plot.")
+            except Exception as e_plt:
+                logger.error(f"Failed to generate SHAP {plot_name} plot: {e_plt}", exc_info=True)
+                plot_success = False
+
+            plot_name = "summary_dot"
+            try:
+                plt.figure()
+                shap.summary_plot(shap_values_pos, X_plot_np, show=False, feature_names=feature_names)
+                plt.title(f"SHAP {plot_name.replace('_', ' ').title()} ({model_name})")
+                plt.tight_layout()
+                plt.savefig(output_dir / f"{model_name}_shap_{plot_name}.png", bbox_inches="tight")
+                plt.close()
+                logger.info(f"Saved SHAP {plot_name} plot.")
+            except Exception as e_plt:
+                logger.error(f"Failed to generate SHAP {plot_name} plot: {e_plt}", exc_info=True)
+                plot_success = False
+
             try:
                 mean_abs_shap = np.abs(shap_values_pos).mean(axis=0)
                 feature_indices = np.argsort(mean_abs_shap)[::-1]
                 num_dep_plots = min(10, len(feature_names))
-                logger.info(
-                    f"Generating SHAP dependence plots for top {num_dep_plots} features..."
-                )
+                logger.info(f"Generating SHAP dependence plots for top {num_dep_plots} features...")
                 for i in range(num_dep_plots):
                     idx = feature_indices[i]
                     if idx < len(feature_names):
                         name = feature_names[idx]
                         try:
                             plt.figure()
-                            shap.dependence_plot(
-                                idx,
-                                shap_values_pos,
-                                data_for_plots,
-                                feature_names=feature_names,
-                                interaction_index="auto",
-                                show=False,
-                            )
+                            shap.dependence_plot(idx, shap_values_pos, X_plot_np, feature_names=feature_names, interaction_index="auto", show=False)  # Pass X_plot_np
                             plt.title(f"SHAP Dependence: {name} ({model_name})")
                             plt.tight_layout()
-                            plt.savefig(
-                                output_dir / f"{model_name}_shap_dependence_{name}.png",
-                                bbox_inches="tight",
-                            )
+                            plt.savefig(output_dir / f"{model_name}_shap_dependence_{name}.png", bbox_inches="tight")
                             plt.close()
                         except Exception as e_dep:
-                            logger.warning(
-                                f"Could not generate dependence plot for feature '{name}' (index {idx}): {e_dep}"
-                            )
+                            logger.warning(f"Could not generate dependence plot for feature '{name}' (index {idx}): {e_dep}")
                     else:
-                        logger.warning(
-                            f"Feature index {idx} out of bounds for feature names list (length {len(feature_names)}). Skipping dependence plot."
-                        )
+                        logger.warning(f"Feature index {idx} out of bounds for feature names list (length {len(feature_names)}). Skipping dependence plot.")
             except Exception as e_dep_loop:
-                logger.error(
-                    f"Error during dependence plot loop: {e_dep_loop}", exc_info=True
-                )
+                logger.error(f"Error during dependence plot loop: {e_dep_loop}", exc_info=True)
                 plot_success = False
+
             instance_idx = 0
             logger.info(f"Generating SHAP force plot for instance {instance_idx}...")
             try:
-                base_value_float = float(expected_value_pos)
-                """ force_plot = shap.force_plot(
-                    base_value_float,
-                    shap_values_pos[instance_idx, :],
-                    data_for_plots.iloc[instance_idx, :],
+                if isinstance(expected_value_pos, (list, np.ndarray)):
+                    base_value_float = float(expected_value_pos[0]) if len(expected_value_pos) == 1 else float(expected_value_pos)  # Handle array case
+                elif isinstance(expected_value_pos, (float, int, np.number)):
+                    base_value_float = float(expected_value_pos)
+                else:
+                    raise ValueError(f"Invalid type for expected_value_pos: {type(expected_value_pos)}")
+
+                # Pass NumPy array row for features
+                shap_values_instance = shap_values_pos[instance_idx, :]
+                features_instance_np = X_plot_np[instance_idx, :]  # Use NumPy row
+
+                shap.force_plot(
+                    base_value=base_value_float,
+                    shap_values=shap_values_instance,
+                    features=features_instance_np,  # Pass NumPy array
                     feature_names=feature_names,
                     matplotlib=True,
                     show=False,
-                ) """
-                plt.title(f"SHAP Force Plot: Instance {instance_idx} ({model_name})")
-                plt.savefig(
-                    output_dir
-                    / f"{model_name}_shap_force_plot_instance_{instance_idx}.png",
-                    bbox_inches="tight",
                 )
+                plt.title(f"SHAP Force Plot: Instance {instance_idx} ({model_name})")
+                plt.savefig(output_dir / f"{model_name}_shap_force_plot_instance_{instance_idx}.png", bbox_inches="tight")
                 plt.close()
                 logger.info(f"SHAP force plot saved for instance {instance_idx}.")
             except Exception as e_force:
-                logger.error(
-                    f"Failed to generate or save SHAP force plot: {e_force}",
-                    exc_info=True,
-                )
+                logger.error(f"Failed to generate or save SHAP force plot: {e_force}", exc_info=True)
                 plot_success = False
+
             logger.info(f"SHAP plots saved to {output_dir}")
         except Exception as e_plot_main:
-            logger.error(
-                f"An error occurred during SHAP plot generation: {e_plot_main}",
-                exc_info=True,
-            )
+            logger.error(f"An error occurred during SHAP plot generation: {e_plot_main}", exc_info=True)
             plot_success = False
     else:
-        logger.warning(
-            "SHAP explainer or values not available. Skipping plot generation."
-        )
+        logger.warning("SHAP explainer or values not available. Skipping plot generation.")
         plot_success = True if explainer is None else False
     shap_duration = time.time() - shap_start_time
     logger.info(f"--- SHAP Analysis Finished. Duration: {shap_duration:.2f}s ---")
@@ -353,8 +351,9 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
 
 
 # --- Main Evaluation Function ---
+# (Remains the same - calls the corrected run_shap_analysis)
 def run_evaluation(config: AppConfig, model_path_override: Optional[str] = None):
-    """Loads the final model and evaluates it on the test set."""
+    # ... (Implementation remains the same) ...
     logger.info("--- Starting Model Evaluation Workflow ---")
     eval_start_time = time.time()
     eval_cfg = config.evaluation
@@ -362,36 +361,39 @@ def run_evaluation(config: AppConfig, model_path_override: Optional[str] = None)
     training_cfg = config.training
     plots_dir = Path(eval_cfg.plots_output_dir)
     plots_dir.mkdir(parents=True, exist_ok=True)
-    model_path = None
+    model_path: Optional[Path] = None
     model_name = "UnknownModel"
+    pipeline = None
     try:
-        if model_path_override:
-            model_path = Path(model_path_override)
-            if not model_path.is_absolute():
-                model_path = PROJECT_ROOT / model_path
-            logger.info(f"Evaluating specified model file: {model_path}")
+        logger.debug(f"Received model_path_override: '{model_path_override}' (Type: {type(model_path_override)})")
+        determined_path_str: Optional[str] = None
+        if model_path_override is not None:
+            if not model_path_override.strip():
+                raise ValueError("Empty --model-path provided.")
+            determined_path_str = model_path_override
+            logger.info(f"Attempting to use specified model path: {determined_path_str}")
         else:
+            logger.debug("No model path override. Determining default best model.")
             all_params_path = Path(training_cfg.all_best_params_input_path)
             if not all_params_path.exists():
-                raise FileNotFoundError(
-                    f"Tuning results file not found at {all_params_path}."
-                )
+                raise FileNotFoundError(f"Tuning results file not found at {all_params_path}.")
             all_params_data = load_json(all_params_path)
             overall_best_model_name = all_params_data.get("overall_best_model_name")
             if not overall_best_model_name:
-                raise ValueError(
-                    "Overall best model name not found in tuning results file."
-                )
-            model_path = Path(
-                f"{training_cfg.final_model_output_base_path}_{overall_best_model_name}.joblib"
-            )
-            logger.info(
-                f"Evaluating overall best model identified during tuning: {overall_best_model_name} from path: {model_path}"
-            )
+                raise ValueError("Overall best model name not found in tuning results file.")
+            determined_path_str = f"{training_cfg.final_model_output_base_path}_{overall_best_model_name}.joblib"
+            logger.info(f"Determined default best model path string: {determined_path_str}")
+        if determined_path_str:
+            _temp_path = Path(determined_path_str)
+            if not _temp_path.is_absolute():
+                model_path = (PROJECT_ROOT / _temp_path).resolve()
+            else:
+                model_path = _temp_path.resolve()
+            logger.debug(f"Resolved model path to: {model_path}")
+        else:
+            raise ValueError("Failed to determine a valid model path string.")
         if not model_path or not model_path.exists():
-            raise FileNotFoundError(
-                f"Model file not found at determined path: {model_path}"
-            )
+            raise FileNotFoundError(f"Model file not found at resolved path: {model_path}")
         pipeline = load_pipeline_joblib(model_path)
         logger.info(f"Loaded final model pipeline from {model_path}")
         if "classifier" in pipeline.named_steps:
@@ -401,6 +403,9 @@ def run_evaluation(config: AppConfig, model_path_override: Optional[str] = None)
         raise
     except ValueError as e:
         logger.critical(f"Error determining model to evaluate: {e}")
+        raise
+    except AttributeError as e:
+        logger.critical(f"AttributeError during model path processing: {e}", exc_info=True)
         raise
     except Exception as e:
         logger.critical(f"Error loading model: {e}", exc_info=True)
@@ -459,12 +464,10 @@ def run_evaluation(config: AppConfig, model_path_override: Optional[str] = None)
                 plot_files.append(roc_path)
             else:
                 plots_success = False
-
             if plot_precision_recall_curve(y_test, y_proba, model_name, pr_path):
                 plot_files.append(pr_path)
             else:
                 plots_success = False
-
         cm_path = plots_dir / f"{model_name}_test_confusion_matrix.png"
         if plot_confusion_matrix(y_test, y_pred, model_name, cm_path):
             plot_files.append(cm_path)
@@ -491,21 +494,22 @@ def run_evaluation(config: AppConfig, model_path_override: Optional[str] = None)
                 logger.info(f"Logged evaluation plots from {plots_dir} to MLflow.")
             else:
                 mlflow.set_tag("plots_status", "failed or incomplete")
-            shap_success = run_shap_analysis(pipeline, X_train, X_test, config)
-            mlflow.set_tag("shap_status", "success" if shap_success else "failed")
+            if pipeline:
+                shap_success = run_shap_analysis(pipeline, X_train, X_test, config)
+                mlflow.set_tag("shap_status", "success" if shap_success else "failed")
+            else:
+                logger.error("Pipeline object not available for SHAP analysis.")
+                mlflow.set_tag("shap_status", "skipped_no_pipeline")
     except Exception as e:
         logger.error(f"Failed to log results to MLflow: {e}", exc_info=True)
         mlflow_success = False
     eval_duration = time.time() - eval_start_time
-    logger.info(
-        f"--- Model Evaluation Workflow Finished. Duration: {eval_duration:.2f}s ---"
-    )
+    logger.info(f"--- Model Evaluation Workflow Finished. Duration: {eval_duration:.2f}s ---")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Evaluate the final churn prediction model."
-    )
+    # (argparse and main execution block remain the same)
+    parser = argparse.ArgumentParser(description="Evaluate the final churn prediction model.")
     parser.add_argument("--config", default="config.yaml", help="Path to config file.")
     parser.add_argument(
         "--model-path",
@@ -515,8 +519,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     try:
-        from typing import Optional
-
         from .config import PROJECT_ROOT, load_config
         from .utils import setup_logging
 

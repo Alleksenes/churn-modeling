@@ -204,7 +204,9 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
         f"Parameters prepared for direct setting on classifier: {classifier_params}"
     )
     try:
+        logger.info("TBF")
         final_pipeline.named_steps["classifier"].set_params(**classifier_params)
+        logger.warning("TBF")
         logger.info("Successfully set hyperparameters directly on the classifier step.")
     except ValueError as e:
         logger.error(

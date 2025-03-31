@@ -5,38 +5,31 @@ project_name: "churn-modeling"
 version: "1.0.0"
 
 data:
-  raw_path: "data/raw/churn_modelling.csv" # Corrected filename if needed
+  raw_path: "data/raw/churn_modelling.csv"
   processed_train_path: "data/processed/train.parquet"
   processed_test_path: "data/processed/test.parquet"
   target_column: "Exited"
   test_size: 0.2
   random_state: 42
-  # Features to keep after dropping irrelevant ones initially
   initial_features: ['CreditScore', 'Geography', 'Gender', 'Age', 'Tenure', 'Balance', 'NumOfProducts', 'HasCrCard', 'IsActiveMember', 'EstimatedSalary']
-  # Explicitly list features used by the pipeline *before* feature engineering
   numerical_vars: ['CreditScore', 'Age', 'Tenure', 'Balance', 'NumOfProducts', 'EstimatedSalary']
-  categorical_vars: ['Geography', 'Gender', 'HasCrCard', 'IsActiveMember'] # Treat binary as categorical for encoding consistency
-
+  categorical_vars: ['Geography', 'Gender', 'HasCrCard', 'IsActiveMember']
+  
 tuning:
   models_to_tune: ['LogisticRegression', 'RandomForest', 'XGBoost', 'SVC']
-  cv_folds: 5
-  optuna_trials_per_model: 5
+  cv_folds: 6
+  optuna_trials_per_model: 5 # adjustable
   optimization_metric: 'f1'
   mlflow_experiment_name: "Churn_Model_Tuning_v1"
-  # NEW: Output file for ALL best parameters found during tuning
   all_best_params_output_path: "models/all_best_hyperparameters.json"
 
 training:
-  # UPDATED: Input file now contains params for all models
   all_best_params_input_path: "models/all_best_hyperparameters.json"
-  # UPDATED: Base output path for the final trained model (model name will be appended)
-  final_model_output_base_path: "models/final_churn_model" # e.g., becomes models/final_churn_model_RandomForest.joblib
+  final_model_output_base_path: "models/final_churn_model" 
   mlflow_experiment_name: "Churn_Model_Training_v1"
 
 evaluation:
-  # Input path for the final model to evaluate
   model_input_path: "models/final_churn_model.joblib"
-  # Directory to save evaluation plots
   plots_output_dir: "reports/figures"
   shap_plots_output_dir: "reports/figures/shap"
   mlflow_experiment_name: "Churn_Model_Evaluation_v1"

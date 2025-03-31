@@ -21,7 +21,7 @@ from sklearn.svm import SVC
 from xgboost import XGBClassifier
 
 from .config import PROJECT_ROOT, AppConfig, load_config
-from .pipeline import create_data_processing_pipeline, sanitize_feature_names
+from .pipeline import create_data_processing_pipeline, _sanitize_column_names
 from .processing import load_processed_data, run_preprocess_workflow
 from .utils import save_json, setup_logging
 
@@ -252,7 +252,7 @@ def objective(
                     X_processed = pipeline.named_steps["data_processing"].fit_transform(
                         X_train, y_train
                     )
-                    X_processed_sanitized = sanitize_feature_names(X_processed.copy())
+                    X_processed_sanitized = _sanitize_column_names(X_processed.copy())
                     classifier_step = pipeline.named_steps["classifier"]
                     scores = cross_val_score(
                         classifier_step,
