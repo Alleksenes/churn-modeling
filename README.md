@@ -22,41 +22,42 @@ This project implements a robust machine learning workflow to predict customer c
 
 ## Project Structure
 
-├── config.yaml # Main configuration file
-├── Makefile # Automation commands (clean, run, etc.)
-├── pyproject.toml # Poetry dependencies and project metadata
-├── poetry.lock # Locked dependency versions
-├── Dockerfile # Docker image definition
-├── README.md # This file
-├── LICENSE # Project license
+```plaintext
+├── config.yaml                # Main configuration file
+├── Makefile                   # Automation commands (clean, run, etc.)
+├── pyproject.toml            # Poetry dependencies and project metadata
+├── poetry.lock                # Locked dependency versions
+├── Dockerfile                 # Docker image definition
+├── README.md                  # This file
+├── LICENSE                    # Project license
 ├── data/
-│ └── raw/ # Raw input data (e.g., churn_modelling.csv)
-│ └── processed/ # Processed data (train/test splits - ignored by git)
-├── models/ # Saved tuning results and trained models (ignored by git)
-├── reports/ # Generated evaluation reports and figures (ignored by git)
-├── logs/ # Log files (ignored by git)
-├── mlruns/ # MLflow tracking data
-├── src/
-│ └── churn_model/ # Core ML workflow logic package
-│ ├── init.py
-│ ├── config.py # Config loading and validation
-│ ├── processing.py # Data loading, cleaning, splitting, FE transformers
-│ ├── pipeline.py # Sklearn pipeline definitions
-│ ├── tune.py # Hyperparameter tuning script (Optuna + MLflow)
-│ ├── train.py # Final model training script
-│ ├── evaluate.py # Model evaluation script (Metrics + SHAP)
-│ ├── predict.py # Prediction logic using saved model
-│ └── utils.py # Logging setup, helper functions
-└── api/ # FastAPI application package
-├── init.py
-├── main.py # FastAPI app definition, startup, routes
-├── schemas.py # Pydantic schemas for API I/O
-├── endpoints/
-│ └── init.py
-│ └── predict.py # Prediction API endpoint logic
-└── tests/ # Unit/integration tests (Optional)
-└── init.py # Prediction API endpoint logic
-
+│   ├── raw/                   # Raw input data (e.g., churn_modelling.csv)
+│   └── processed/             # Processed data (train/test splits - ignored by git)
+├── models/                    # Saved tuning results and trained models (ignored by git)
+├── reports/                   # Generated evaluation reports and figures (ignored by git)
+├── logs/                      # Log files (ignored by git)
+├── mlruns/                    # MLflow tracking data
+└── src/
+    ├── churn_model/           # Core ML workflow logic package
+    │   ├── __init__.py
+    │   ├── config.py          # Config loading and validation
+    │   ├── processing.py      # Data loading, cleaning, splitting, FE transformers
+    │   ├── pipeline.py        # Sklearn pipeline definitions
+    │   ├── tune.py            # Hyperparameter tuning script (Optuna + MLflow)
+    │   ├── train.py           # Final model training script
+    │   ├── evaluate.py        # Model evaluation script (Metrics + SHAP)
+    │   ├── predict.py         # Prediction logic using saved model
+    │   └── utils.py           # Logging setup, helper functions
+└── api/
+    ├── __init__.py
+    ├── main.py                # FastAPI app definition, startup, routes
+    ├── schemas.py             # Pydantic schemas for API I/O
+    └── endpoints/
+        ├── __init__.py
+        └── predict.py         # Prediction API endpoint logic
+└── tests/                     # Unit/integration tests (Optional)
+    └── __init__.py           # Initialization for tests
+```
 
 ## Setup Instructions
 
