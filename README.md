@@ -1,6 +1,6 @@
 # Customer Churn Prediction with FastAPI & Docker Integration
 
-This project implements a robust machine learning workflow to predict customer churn using a banking dataset. It includes data processing, feature engineering, hyperparameter tuning (Optuna), model training (multiple algorithms), evaluation (metrics, plots, SHAP explainability), experiment tracking (MLflow), and deployment via a FastAPI API, all within a reproducible environment managed by Poetry and Make.
+This project implements a robust machine learning workflow to predict customer churn using a banking dataset. It includes data processing, feature engineering, hyperparameter tuning (Optuna), model training (multiple algorithms), evaluation (metrics, plots, SHAP explainability), experiment tracking (MLflow), and deployment via FastAPI, all within a reproducible environment managed by Poetry and Make.
 
 **Goal:** To build an end-to-end system for predicting customer churn, demonstrating best practices in MLOps, data science, and software engineering.
 
@@ -30,31 +30,33 @@ This project implements a robust machine learning workflow to predict customer c
 ├── README.md # This file
 ├── LICENSE # Project license
 ├── data/
-│ ├── raw/ # Raw input data (e.g., churn_modelling.csv)
+│ └── raw/ # Raw input data (e.g., churn_modelling.csv)
 │ └── processed/ # Processed data (train/test splits - ignored by git)
 ├── models/ # Saved tuning results and trained models (ignored by git)
 ├── reports/ # Generated evaluation reports and figures (ignored by git)
 ├── logs/ # Log files (ignored by git)
-├── mlruns/ # MLflow tracking data (ignored by git)
+├── mlruns/ # MLflow tracking data
 ├── src/
-│ ├── churn_model/ # Core ML workflow logic package
-│ │ ├── init.py
-│ │ ├── config.py # Config loading and validation
-│ │ ├── processing.py # Data loading, cleaning, splitting, FE transformers
-│ │ ├── pipeline.py # Sklearn pipeline definitions
-│ │ ├── tune.py # Hyperparameter tuning script (Optuna + MLflow)
-│ │ ├── train.py # Final model training script
-│ │ ├── evaluate.py # Model evaluation script (Metrics + SHAP)
-│ │ ├── predict.py # Prediction logic using saved model
-│ │ └── utils.py # Logging setup, helper functions
-│ └── api/ # FastAPI application package
+│ └── churn_model/ # Core ML workflow logic package
 │ ├── init.py
-│ ├── main.py # FastAPI app definition, startup, routes
-│ ├── schemas.py # Pydantic schemas for API I/O
-    └── endpoints/
-        ├── predict.py # Prediction API endpoint logic
+│ ├── config.py # Config loading and validation
+│ ├── processing.py # Data loading, cleaning, splitting, FE transformers
+│ ├── pipeline.py # Sklearn pipeline definitions
+│ ├── tune.py # Hyperparameter tuning script (Optuna + MLflow)
+│ ├── train.py # Final model training script
+│ ├── evaluate.py # Model evaluation script (Metrics + SHAP)
+│ ├── predict.py # Prediction logic using saved model
+│ └── utils.py # Logging setup, helper functions
+└── api/ # FastAPI application package
+├── init.py
+├── main.py # FastAPI app definition, startup, routes
+├── schemas.py # Pydantic schemas for API I/O
+├── endpoints/
+│ └── init.py
+│ └── predict.py # Prediction API endpoint logic
 └── tests/ # Unit/integration tests (Optional)
-    ├── __init__.py # Prediction API endpoint logic
+└── init.py # Prediction API endpoint logic
+
 
 ## Setup Instructions
 
@@ -120,6 +122,7 @@ The `Makefile` provides convenient commands to run the workflow stages. Execute 
         poetry run mlflow ui
         ```
     *   Open your browser to `http://127.0.0.1:5000`.
+    
     *Alternatively, you may choose to run it as 2nd to monitor each and every step during your training*
 
 10. **Run API Server:** (Loads the default best model for predictions)
@@ -131,8 +134,8 @@ The `Makefile` provides convenient commands to run the workflow stages. Execute 
 
 11. **Code Quality:**
     ```bash
-    make format  # Format code using black, isort
-    make lint    # Check code style using flake8
+    make format
+    make lint
     ```
 
 ## Configuration
@@ -150,8 +153,7 @@ The evaluation script (`src/churn_model/evaluate.py`) calculates various metrics
 
 **Best Model Performance [Exemplary]: XGBoost**
 
-*with Criteria, adjustable in [config.yaml]*:
-**cv_folds: 6,   optuna_trials_per_model: 5,  optimization_metric: 'f1'**
+*with Criteria, adjustable in `config.yaml`: cv_folds: 6,   optuna_trials_per_model: 5,  optimization_metric: 'f1'*
 
 | Metric             | Test Set Score |
 | :----------------- | :------------- |
@@ -168,12 +170,15 @@ The evaluation script (`src/churn_model/evaluate.py`) calculates various metrics
 ### Performance Metrics
 
 **Confusion Matrix:**
+
 ![Confusion Matrix](exemplary/XGBClassifier_test_confusion_matrix.png)
 
 **Precision-Recall Curve:**
+
 ![Precision-Recall Curve](exemplary/XGBClassifier_test_pr_curve.png)
 
 **ROC Curve:**
+
 ![ROC Curve](exemplary/XGBClassifier_test_roc_curve.png)
 
 ### SHAP Analysis
@@ -286,4 +291,4 @@ A `Dockerfile` is provided to containerize the FastAPI application.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+under the MIT License: [LICENSE](LICENSE).
