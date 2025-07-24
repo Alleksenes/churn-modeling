@@ -25,11 +25,8 @@ from .pipeline import create_data_processing_pipeline, _sanitize_column_names
 from .processing import load_processed_data, run_preprocess_workflow
 from .utils import save_json, setup_logging
 
-# --- Setup ---
 setup_logging()
 
-
-# --- Model Definitions ---
 def get_base_models(config: AppConfig) -> dict:
     """Returns dictionary of instantiated base models."""
     random_state = config.data.random_state
@@ -60,8 +57,6 @@ def get_base_models(config: AppConfig) -> dict:
         ),
     }
 
-
-# --- Optuna Hyperparameter Spaces ---
 def get_optuna_params(
     trial: optuna.Trial, model_name: str, y_train_for_imbalance: np.ndarray = None
 ):
@@ -80,7 +75,6 @@ def get_optuna_params(
             params["classifier__l1_ratio"] = trial.suggest_float("l1_ratio", 0.05, 0.95)
         return params
 
-    # --- RandomForest, LightGBM, SVC remain the same as previous version ---
     elif model_name == "RandomForest":
         return {
             "classifier__n_estimators": trial.suggest_int(
@@ -168,7 +162,6 @@ def get_optuna_params(
         return {}
 
 
-# --- Optuna Objective Function ---
 def objective(
     trial: optuna.Trial,
     model_name: str,
@@ -182,20 +175,17 @@ def objective(
     tuning_cfg = config.tuning
     data_cfg = config.data
 
-    # 1. Create Data Processing Pipeline
     data_processing_pipeline = create_data_processing_pipeline(
         numerical_vars=data_cfg.numerical_vars,
         categorical_vars=data_cfg.categorical_vars,
     )
 
-    # 2. Get Base Model Instance
     if model_name not in base_models:
         raise optuna.exceptions.TrialPruned(f"Model {model_name} not defined.")
     base_model = base_models[model_name].__class__(
         **base_models[model_name].get_params()
     )
 
-    # 3. Create Full Scikit-learn Pipeline
     pipeline = Pipeline(
         steps=[
             ("data_processing", data_processing_pipeline),
@@ -203,7 +193,6 @@ def objective(
         ]
     )
 
-    # 4. Get & Set Hyperparameters
     params_to_tune = get_optuna_params(
         trial, model_name, y_train_for_imbalance=y_train.to_numpy()
     )
@@ -220,7 +209,6 @@ def objective(
         )
         raise optuna.exceptions.TrialPruned(f"Incompatible parameters: {e}")
 
-    # 5. Perform Cross-Validation
     cv = StratifiedKFold(
         n_splits=tuning_cfg.cv_folds, shuffle=True, random_state=data_cfg.random_state
     )
@@ -230,7 +218,6 @@ def objective(
     except ValueError:
         raise optuna.exceptions.TrialPruned(f"Invalid scorer: {optimization_metric}")
 
-    # 6. MLflow Logging (Nested Run)
     with mlflow.start_run(nested=True, run_name=f"Trial_{trial.number}") as trial_run:
         mlflow.log_params(
             {
@@ -305,14 +292,12 @@ def objective(
     return mean_score
 
 
-# --- Main Tuning Function ---
 def run_tuning(config: AppConfig):
     """Orchestrates the hyperparameter tuning process."""
     logger.info("--- Starting Hyperparameter Tuning Workflow ---")
     tuning_cfg = config.tuning
     data_cfg = config.data
 
-    # --- Load Data ---
     try:
         X_train, X_test, y_train, y_test = load_processed_data(data_cfg)
         logger.info("Loaded processed data for tuning.")
@@ -333,7 +318,6 @@ def run_tuning(config: AppConfig):
     except Exception as e:
         raise RuntimeError("Failed to load data for tuning.") from e
 
-    # --- MLflow Setup ---
     mlflow.set_experiment(tuning_cfg.mlflow_experiment_name)
     logger.info(f"MLflow Experiment set to: {tuning_cfg.mlflow_experiment_name}")
 
@@ -341,7 +325,6 @@ def run_tuning(config: AppConfig):
     overall_best_model_name = None
     all_models_best_results = {}
 
-    # --- Loop Through Models ---
     for model_name in tuning_cfg.models_to_tune:
         logger.info(f"\n===== Tuning Model: {model_name} =====")
         with mlflow.start_run(run_name=f"Tune_{model_name}") as parent_run:
@@ -374,7 +357,6 @@ def run_tuning(config: AppConfig):
                 mlflow.set_tag("tuning_status", "failed")
                 continue
 
-            # --- Process Study Results ---
             try:
                 completed_trials = [
                     t
@@ -440,7 +422,6 @@ def run_tuning(config: AppConfig):
                     "mlflow_run_id": parent_run_id,
                 }
 
-    # --- MODIFICATION: Save ALL Best Parameters ---
     if all_models_best_results:
         logger.info(f"\n===== Tuning Results Summary =====")
         if overall_best_model_name:

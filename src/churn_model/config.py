@@ -2,10 +2,9 @@
 # File: src/churn_model/config.py
 # ============================================
 import yaml
-from pydantic import (  # Import necessary decorators/types
+from pydantic import (
     BaseModel,
     Field,
-    validator,
     root_validator,
     ValidationError,
     field_validator,
@@ -15,12 +14,10 @@ from pathlib import Path
 from loguru import logger
 import sys
 
-# Define PROJECT_ROOT relative to this file's location
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 CONFIG_FILE_PATH = PROJECT_ROOT / "config.yaml"
 
 
-# --- Pydantic Models for Validation ---
 class DataConfig(BaseModel):
     raw_path: str
     processed_train_path: str
@@ -32,27 +29,20 @@ class DataConfig(BaseModel):
     numerical_vars: List[str]
     categorical_vars: List[str]
 
-    # --- FIX: Use @field_validator (preferred in Pydantic V2) ---
-    # Apply to multiple fields using '*' or list them
     @field_validator("raw_path", "processed_train_path", "processed_test_path", mode="before")
     @classmethod  # Decorate as class method
     def make_path_absolute(cls, v: Any) -> str:
         """Ensures paths are absolute, resolving relative to project root."""
-        # Input 'v' is the raw value before type validation
         if not isinstance(v, (str, Path)):
-            # Let Pydantic handle the type error later if not string/path
             return v
         path = Path(v)
         if path.is_absolute():
             return str(path)
-        absolute_path = (PROJECT_ROOT / path).resolve()  # Resolve removes '..' etc.
+        absolute_path = (PROJECT_ROOT / path).resolve()
         logger.trace(f"Resolved relative path '{v}' to '{absolute_path}'")
         return str(absolute_path)
-    # --- END FIX ---
 
-    # Using root_validator for cross-field checks (still valid but less preferred than model_validator in V2)
-    # Alternatively, use model_validator (V2 style)
-    @root_validator(skip_on_failure=True)  # Use pre=False (default) to run after field validation
+    @root_validator(skip_on_failure=True)
     @classmethod
     def check_feature_consistency(cls, values):
         """Checks overlap and ensures features are in initial list."""
@@ -60,7 +50,6 @@ class DataConfig(BaseModel):
         cat_vars = values.get("categorical_vars")
         initial_features = values.get("initial_features")
 
-        # Check overlap only if both lists exist
         if num_vars and cat_vars:
             num_set = set(num_vars)
             cat_set = set(cat_vars)
@@ -68,7 +57,6 @@ class DataConfig(BaseModel):
             if overlap:
                 raise ValueError(f"Features cannot be both numerical and categorical: {overlap}")
 
-        # Check subset only if lists exist
         if initial_features:
             initial_set = set(initial_features)
             if num_vars and not set(num_vars).issubset(initial_set):
@@ -88,7 +76,6 @@ class TuningConfig(BaseModel):
     mlflow_experiment_name: str
     all_best_params_output_path: str
 
-    # --- FIX: Use @field_validator ---
     @field_validator("all_best_params_output_path", mode="before")
     @classmethod
     def make_path_absolute(cls, v: Any) -> str:
@@ -97,15 +84,12 @@ class TuningConfig(BaseModel):
             return v
         path = Path(v)
         return str(path) if path.is_absolute() else str((PROJECT_ROOT / path).resolve())
-    # --- END FIX ---
-
 
 class TrainingConfig(BaseModel):
     all_best_params_input_path: str
     final_model_output_base_path: str
     mlflow_experiment_name: str
 
-    # --- FIX: Use @field_validator ---
     @field_validator("all_best_params_input_path", "final_model_output_base_path", mode="before")
     @classmethod
     def make_path_absolute(cls, v: Any) -> str:
@@ -114,7 +98,6 @@ class TrainingConfig(BaseModel):
             return v
         path = Path(v)
         return str(path) if path.is_absolute() else str((PROJECT_ROOT / path).resolve())
-    # --- END FIX ---
 
 
 class EvaluationConfig(BaseModel):
@@ -123,7 +106,6 @@ class EvaluationConfig(BaseModel):
     mlflow_experiment_name: str
     shap_kernel_background_samples: int = Field(..., gt=0)
 
-    # --- FIX: Use @field_validator ---
     @field_validator("plots_output_dir", "shap_plots_output_dir", mode="before")
     @classmethod
     def make_path_absolute(cls, v: Any) -> str:
@@ -132,7 +114,6 @@ class EvaluationConfig(BaseModel):
             return v
         path = Path(v)
         return str(path) if path.is_absolute() else str((PROJECT_ROOT / path).resolve())
-    # --- END FIX ---
 
 
 class APIConfig(BaseModel):
@@ -150,7 +131,6 @@ class AppConfig(BaseModel):
     api: APIConfig
 
 
-# --- Loading Function ---
 def load_config(config_path: Path = CONFIG_FILE_PATH) -> AppConfig:
     """Loads and validates config from YAML."""
     if not config_path.exists():

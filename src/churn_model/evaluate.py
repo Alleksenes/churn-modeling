@@ -32,11 +32,9 @@ from .pipeline import _sanitize_column_names
 from .processing import load_processed_data
 from .utils import load_json, load_pipeline_joblib, setup_logging
 
-# --- Setup ---
 setup_logging()
 
 
-# --- Plotting Functions ---
 def plot_roc_curve(y_true, y_proba, model_name, output_path: Path):
     """Generates and saves ROC curve plot."""
     try:
@@ -157,7 +155,7 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
     shap_values = None
     expected_value = None
     X_data_for_shap_values = X_test_processed
-    X_data_for_plots = X_test_processed  # Initially assume using full test data for plots
+    X_data_for_plots = X_test_processed
 
     try:
         if model_type in ["RandomForestClassifier", "LGBMClassifier", "XGBClassifier"]:
@@ -188,9 +186,8 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
             logger.debug(f"Background data shape for KernelExplainer: {background_data_kernel.shape}")
             explainer = shap.KernelExplainer(predict_proba_wrapper, background_data_kernel)
             num_test_samples = min(100, X_test_processed.shape[0])
-            # IMPORTANT: Update X_data_for_shap_values AND X_data_for_plots if using subset
             X_data_for_shap_values = X_test_processed.iloc[:num_test_samples, :]
-            X_data_for_plots = X_data_for_shap_values  # Use the same subset for plotting features
+            X_data_for_plots = X_data_for_shap_values
             logger.info(f"Calculating SHAP values for {num_test_samples} test samples (KernelExplainer)...")
             calc_start = time.time()
             shap_values = explainer.shap_values(X_data_for_shap_values, nsamples="auto")
@@ -208,12 +205,10 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
         logger.error(f"Failed during SHAP calculation: {e}", exc_info=True)
         return False
 
-    # --- Generate SHAP Plots ---
     plot_success = True
     if explainer and shap_values is not None:
         logger.info("Generating SHAP plots...")
         try:
-            # 1. Extract positive class values and ensure NumPy array
             shap_values_pos = None
             expected_value_pos = None
             if isinstance(shap_values, list) and len(shap_values) == 2:
@@ -240,24 +235,20 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
                 return False
             logger.debug(f"Positive class SHAP values shape: {shap_values_pos.shape}")
 
-            # --- FIX: Convert X_data_for_plots to NumPy array for plotting functions ---
             if isinstance(X_data_for_plots, pd.DataFrame):
-                # Use .to_numpy() which is generally preferred over .values
                 X_plot_np = X_data_for_plots.to_numpy()
                 logger.debug(f"Converted X_data_for_plots to NumPy array for plotting. Shape: {X_plot_np.shape}")
             elif isinstance(X_data_for_plots, np.ndarray):
-                X_plot_np = X_data_for_plots  # Already numpy
+                X_plot_np = X_data_for_plots
                 logger.debug("X_data_for_plots is already NumPy array.")
             else:
                 logger.error(f"Unsupported type for X_data_for_plots: {type(X_data_for_plots)}")
                 return False
-            # --- END FIX ---
 
             if shap_values_pos.shape[0] != X_plot_np.shape[0]:
                 logger.error(f"SHAP values row count ({shap_values_pos.shape[0]}) != plot data row count ({X_plot_np.shape[0]})!")
                 return False
 
-            # --- Plotting (Pass NumPy array X_plot_np instead of DataFrame X_data_for_plots) ---
             plot_name = "summary_bar"
             try:
                 plt.figure()
@@ -295,7 +286,7 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
                         name = feature_names[idx]
                         try:
                             plt.figure()
-                            shap.dependence_plot(idx, shap_values_pos, X_plot_np, feature_names=feature_names, interaction_index="auto", show=False)  # Pass X_plot_np
+                            shap.dependence_plot(idx, shap_values_pos, X_plot_np, feature_names=feature_names, interaction_index="auto", show=False)
                             plt.title(f"SHAP Dependence: {name} ({model_name})")
                             plt.tight_layout()
                             plt.savefig(output_dir / f"{model_name}_shap_dependence_{name}.png", bbox_inches="tight")
@@ -312,20 +303,19 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
             logger.info(f"Generating SHAP force plot for instance {instance_idx}...")
             try:
                 if isinstance(expected_value_pos, (list, np.ndarray)):
-                    base_value_float = float(expected_value_pos[0]) if len(expected_value_pos) == 1 else float(expected_value_pos)  # Handle array case
+                    base_value_float = float(expected_value_pos[0]) if len(expected_value_pos) == 1 else float(expected_value_pos)
                 elif isinstance(expected_value_pos, (float, int, np.number)):
                     base_value_float = float(expected_value_pos)
                 else:
                     raise ValueError(f"Invalid type for expected_value_pos: {type(expected_value_pos)}")
 
-                # Pass NumPy array row for features
                 shap_values_instance = shap_values_pos[instance_idx, :]
-                features_instance_np = X_plot_np[instance_idx, :]  # Use NumPy row
+                features_instance_np = X_plot_np[instance_idx, :]
 
                 shap.force_plot(
                     base_value=base_value_float,
                     shap_values=shap_values_instance,
-                    features=features_instance_np,  # Pass NumPy array
+                    features=features_instance_np,
                     feature_names=feature_names,
                     matplotlib=True,
                     show=False,
@@ -350,10 +340,7 @@ def run_shap_analysis(pipeline, X_train, X_test, config: AppConfig):
     return plot_success
 
 
-# --- Main Evaluation Function ---
-# (Remains the same - calls the corrected run_shap_analysis)
 def run_evaluation(config: AppConfig, model_path_override: Optional[str] = None):
-    # ... (Implementation remains the same) ...
     logger.info("--- Starting Model Evaluation Workflow ---")
     eval_start_time = time.time()
     eval_cfg = config.evaluation
@@ -508,7 +495,6 @@ def run_evaluation(config: AppConfig, model_path_override: Optional[str] = None)
 
 
 if __name__ == "__main__":
-    # (argparse and main execution block remain the same)
     parser = argparse.ArgumentParser(description="Evaluate the final churn prediction model.")
     parser.add_argument("--config", default="config.yaml", help="Path to config file.")
     parser.add_argument(

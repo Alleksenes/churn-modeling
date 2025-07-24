@@ -4,7 +4,7 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Tuple  # Any, Dict, import numpy as np
+from typing import List, Tuple  # Any, Dict
 
 import pandas as pd
 from loguru import logger
@@ -14,10 +14,8 @@ from sklearn.model_selection import train_test_split
 from .config import PROJECT_ROOT, AppConfig, DataConfig
 from .utils import setup_logging
 
-# --- Setup Logging ---
-# setup_logging() # Called explicitly in main scripts or __main__ block
+# setup_logging() - Called explicitly in main scripts or __main__ block
 
-# --- Custom Transformers ---
 
 
 class FeatureRatioCalculator(BaseEstimator, TransformerMixin):
@@ -140,7 +138,6 @@ class AgeBinner(BaseEstimator, TransformerMixin):
         return output_features
 
 
-# --- Data Loading and Processing Functions ---
 def load_raw_data(file_path: Path) -> pd.DataFrame:
     """Loads raw data from CSV, handling potential encoding issues."""
     logger.info(f"Loading raw data from {file_path}...")

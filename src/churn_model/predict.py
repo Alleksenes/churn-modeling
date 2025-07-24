@@ -8,10 +8,8 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 from loguru import logger
 
-# from .config import PROJECT_ROOT, AppConfig, load_config
 from .utils import load_json, load_pipeline_joblib, setup_logging
 
-# --- Global Cache ---
 _config_cache: Optional[AppConfig] = None
 _model_path_cache: Optional[Path] = None
 _model_load_error: Optional[str] = None
@@ -43,7 +41,6 @@ def _initialize_prediction_service():
                 "Overall best model name not found in tuning results file."
             )
 
-        # Construct the path to the default best model
         default_model_path = Path(
             f"{training_cfg.final_model_output_base_path}_{overall_best_model_name}.joblib"
         )
@@ -53,9 +50,9 @@ def _initialize_prediction_service():
                 f"Default best model file not found at path: {default_model_path}"
             )
             logger.critical(f"CRITICAL: {_model_load_error}")
-            _model_path_cache = None  # Ensure path is None if file missing
+            _model_path_cache = None
         else:
-            _model_path_cache = default_model_path  # Store the path
+            _model_path_cache = default_model_path
             logger.info(
                 f"Prediction service initialized. Default model path: {_model_path_cache}"
             )
@@ -81,7 +78,6 @@ def _initialize_prediction_service():
 _initialize_prediction_service()
 
 
-# --- Prediction Function ---
 def make_prediction(
     *, input_data: Union[pd.DataFrame, List[Dict[str, Any]]]
 ) -> Dict[str, Optional[List[Any]]]:
@@ -107,7 +103,6 @@ def make_prediction(
             "error": "Prediction service not ready",
         }
 
-    # --- Load Pipeline (Per Request) ---
     try:
         pipeline = load_pipeline_joblib(_model_path_cache)
     except FileNotFoundError:
@@ -127,7 +122,6 @@ def make_prediction(
             "error": "Failed to load model",
         }
 
-    # --- Process Input Data ---
     try:
         if isinstance(input_data, list):
             input_df = pd.DataFrame(input_data)
@@ -154,7 +148,6 @@ def make_prediction(
             "error": "Error processing input data",
         }
 
-    # --- Make Prediction ---
     logger.info(f"Making prediction on {len(input_df)} sample(s)...")
     try:
         model_name = "Unknown"
@@ -173,7 +166,6 @@ def make_prediction(
             else:
                 probabilities = None
         else:
-            # Original prediction for other models
             predictions = pipeline.predict(input_df)
             if hasattr(pipeline, "predict_proba"):
                 probabilities = pipeline.predict_proba(input_df)[:, 1]

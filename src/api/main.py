@@ -25,7 +25,6 @@ except ImportError as e:
     sys.exit(1)
 
 
-# --- Load Configuration ---
 try:
     config = load_config()
     api_cfg = config.api
@@ -41,12 +40,10 @@ except Exception as e:
     )()
 
 
-# --- Setup Logging ---
 setup_logging()
 logger.info("Logging configured for API.")
 
 
-# --- Creating FastAPI App ---
 app = FastAPI(
     title=api_cfg.title,
     version=api_cfg.version,
@@ -56,8 +53,6 @@ app = FastAPI(
 )
 
 
-# --- Middleware ---
-# --- Middleware ---
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     """
@@ -82,9 +77,6 @@ async def add_process_time_header(request: Request, call_next):
         f"{request.method} {request.url.path} - Completed in {process_time:.4f}s - Status: {response.status_code}"
     )
     return response
-
-
-# --- Exception Handlers ---
 
 
 @app.exception_handler(RequestValidationError)
@@ -121,7 +113,6 @@ async def generic_exception_handler(request: Request, exc: Exception):
     )
 
 
-# --- Routers ---
 @app.get("/", tags=["Health"], summary="Basic API Health Check")
 async def health_check():
     """Returns the operational status of the API and the prediction model."""
@@ -146,7 +137,6 @@ api_router_v1.include_router(predict_endpoint.router, tags=["Prediction"])
 app.include_router(api_router_v1)
 
 
-# --- Simpler Startup/Shutdown Events (for older FastAPI or basic needs) ---
 @app.on_event("startup")
 async def startup_event():
     """Log API startup status."""

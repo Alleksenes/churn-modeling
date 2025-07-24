@@ -31,8 +31,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-# Usually these files are written by a python script from a template
-# before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -136,7 +134,6 @@ Thumbs.db
 
 # Data files
 data/processed/
-# data/raw/ # Uncomment if raw data shouldn't be committed
 
 # Model files
 models/*.joblib

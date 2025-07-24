@@ -26,11 +26,8 @@ from .pipeline import SanitizeNamesTransformer, create_data_processing_pipeline
 from .processing import load_processed_data
 from .utils import load_json, save_pipeline_joblib, setup_logging
 
-# --- Setup ---
 setup_logging()
 
-
-# --- Model Definitions ---
 def get_base_models(config: AppConfig) -> Dict[str, Any]:
     """Returns dictionary of instantiated base models."""
     random_state = config.data.random_state
@@ -61,8 +58,6 @@ def get_base_models(config: AppConfig) -> Dict[str, Any]:
         ),
     }
 
-
-# --- Main Training Function ---
 def run_training(config: AppConfig, model_to_train: Optional[str] = None):
     """
     Trains a specified model (or the overall best) using hyperparameters
@@ -73,7 +68,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
     training_cfg = config.training
     data_cfg = config.data
 
-    # --- Load All Best Hyperparameters ---
     all_params_path = Path(training_cfg.all_best_params_input_path)
     if not all_params_path.exists():
         logger.error(
@@ -92,7 +86,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
         )
         raise
 
-    # --- Determine Which Model to Train ---
     target_model_name: Optional[str] = None
     target_hyperparameters: Optional[Dict[str, Any]] = None
     if model_to_train:
@@ -134,7 +127,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
         raise ValueError(f"Missing hyperparameters for {target_model_name}")
     logger.info(f"Using hyperparameters (with prefix): {target_hyperparameters}")
 
-    # --- Load Data ---
     try:
         X_train, X_test, y_train, y_test = load_processed_data(data_cfg)
         logger.info(
@@ -146,7 +138,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
         logger.error(f"Failed to load processed data: {e}", exc_info=True)
         raise
 
-    # --- Create Pipeline ---
     base_models = get_base_models(config)
     if target_model_name not in base_models:
         raise ValueError(f"Unknown base model type: {target_model_name}")
@@ -159,22 +150,19 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
         categorical_vars=data_cfg.categorical_vars,
     )
 
-    # --- MODIFICATION: Conditionally add Sanitizer ---
     pipeline_steps = [("data_processing", data_processing_pipeline)]
     if target_model_name == "XGBoost":
         logger.info("Adding feature name sanitizer step for XGBoost.")
         pipeline_steps.append(
             ("sanitize_names", SanitizeNamesTransformer)
-        )  # Add sanitizer step
-    pipeline_steps.append(("classifier", base_model))  # Add classifier last
+        )
+    pipeline_steps.append(("classifier", base_model))
 
     final_pipeline = Pipeline(steps=pipeline_steps)
     logger.debug(
         f"Created final pipeline structure with steps: {[s[0] for s in final_pipeline.steps]}"
     )
-    # --- END MODIFICATION ---
-
-    # --- Prepare and Set Hyperparameters ---
+    
     classifier_params: Dict[str, Any] = {}
     for key, value in target_hyperparameters.items():
         if key.startswith("classifier__"):
@@ -221,7 +209,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
         )
         raise
 
-    # --- MLflow Logging ---
     mlflow.set_experiment(training_cfg.mlflow_experiment_name)
     with mlflow.start_run(run_name=f"Final_Training_{target_model_name}") as run:
         run_id = run.info.run_id
@@ -230,7 +217,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
         mlflow.log_params(classifier_params)
         mlflow.log_artifact(str(all_params_path))
 
-        # --- Fit Model ---
         logger.info("Fitting final pipeline on full training data...")
         fit_start_time = time.time()
         try:
@@ -252,7 +238,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
             mlflow.set_tag("training_status", "failed")
             raise
 
-        # --- Quick Evaluation on Test Set ---
         logger.info("Performing quick evaluation on test set...")
         eval_metrics = {}
         try:
@@ -279,7 +264,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
             logger.warning(f"Quick evaluation failed: {e}", exc_info=True)
             mlflow.set_tag("quick_evaluation_status", "failed")
 
-        # --- Save Final Model ---
         final_model_path = Path(
             f"{training_cfg.final_model_output_base_path}_{target_model_name}.joblib"
         )
@@ -293,7 +277,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
             try:
                 from mlflow.models.signature import infer_signature
 
-                # --- FIX for MLflow Signature ---
                 try:
                     signature = infer_signature(
                         X_train.head(), final_pipeline.predict(X_train.head())
@@ -303,7 +286,6 @@ def run_training(config: AppConfig, model_to_train: Optional[str] = None):
                         f"Could not infer signature: {sig_inf_e}. Proceeding without signature."
                     )
                     signature = None
-                # --- End FIX ---
                 mlflow.sklearn.log_model(
                     sk_model=final_pipeline,
                     artifact_path=f"final_model_sklearn_{target_model_name}",

@@ -13,8 +13,6 @@ from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardSc
 
 from .processing import AgeBinner, FeatureRatioCalculator
 
-
-# --- Feature Name Sanitizer Function (as before) ---
 def _sanitize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """Internal function to sanitize column names for XGBoost compatibility."""
     original_columns = df.columns.tolist()
@@ -27,8 +25,6 @@ def _sanitize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = sanitized_columns
     return df
 
-
-# --- Sanitizer Transformer ---
 SanitizeNamesTransformer = FunctionTransformer(_sanitize_column_names, validate=False)
 
 
@@ -40,17 +36,14 @@ def create_data_processing_pipeline(
     Output is set to pandas DataFrame.
     """
     logger.info("Creating data processing pipeline...")
-    # ... (Define FE steps: ratio_creator, age_binner) ...
     ratio_creator = FeatureRatioCalculator(
         ratio_pairs=[("Balance", "EstimatedSalary"), ("CreditScore", "Age")]
     )
     age_binner = AgeBinner()
-    # ... (Define Preprocessing steps: numerical_imputer, scaler, encoder) ...
     numerical_imputer = SimpleImputer(strategy="median")
     scaler = StandardScaler()
     encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
 
-    # --- Build the Pipeline ---
     feature_engineering = Pipeline(
         steps=[("ratio_features", ratio_creator), ("age_binning", age_binner)]
     )

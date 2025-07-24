@@ -89,9 +89,6 @@ def setup_logging(config_path: Path = CONFIG_DIR / "logging_config.json"):
         _logging_configured = True
 
 
-# --- Generic Save/Load Helpers ---
-
-
 def save_json(data: Dict, file_path: Path):
     """Saves dictionary data to JSON file."""
     try:

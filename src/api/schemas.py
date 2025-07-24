@@ -4,10 +4,8 @@
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field  # , validator
+from pydantic import BaseModel, Field
 
-
-# --- Enums for Validation ---
 class GeographyEnum(str, Enum):
     france = "France"
     spain = "Spain"
@@ -19,7 +17,6 @@ class GenderEnum(str, Enum):
     female = "Female"
 
 
-# --- Input Schemas ---
 class ChurnPredictionInput(BaseModel):
     """Input schema for single churn prediction."""
 
@@ -69,7 +66,6 @@ class BulkChurnPredictionInput(BaseModel):
     inputs: List[ChurnPredictionInput] = Field(..., min_items=1)
 
 
-# --- Output Schemas ---
 class ChurnPredictionOutput(BaseModel):
     """Output schema for single churn prediction."""
 
